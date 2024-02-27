@@ -14,8 +14,14 @@ export const queryPineconeVectorStoreAndQueryLLM = async (
   console.log('Querying Pinecone vector store...');
   // 2. Retrieve the Pinecone index
   const index = client.Index(indexName);
+  console.log('gotten index...');
   // 3. Create query embedding
-  const queryEmbedding = await new OpenAIEmbeddings().embedQuery(question)
+  console.log('Question: ', question);
+  const queryEmbedding = await new OpenAIEmbeddings({
+    openAIApiKey: process.env.OPENAI_API_KEY || '',
+    modelName: 'text-embedding-3-small',
+  }).embedQuery(question)
+  console.log('created query embedding...', queryEmbedding);
   // 4. Query Pinecone index and return top 10 matches
   let queryResponse = await index.query({
     queryRequest: {
@@ -25,23 +31,37 @@ export const queryPineconeVectorStoreAndQueryLLM = async (
       includeValues: true,
     },
   });
+  console.log('queried index...', queryResponse);
   // 5. Log the number of matches 
   console.log(`Found ${queryResponse.matches.length} matches...`);
   // 6. Log the question being asked
   console.log(`Asking question: ${question}...`);
   if (queryResponse.matches.length) {
     // 7. Create an OpenAI instance and load the QAStuffChain
-    const llm = new OpenAI({});
+    console.log('start  S7');
+    const llm = new OpenAI({
+      openAIApiKey: process.env.OPENAI_API_KEY || '',
+      // modelName: 'gpt-4-0125-preview',
+      modelName: 'gpt-3.5-turbo',
+    });
     const chain = loadQAStuffChain(llm);
+    console.log('end  S7');
+
     // 8. Extract and concatenate page content from matched documents
+    console.log('start  S8');
     const concatenatedPageContent = queryResponse.matches
       .map((match) => match.metadata.pageContent)
       .join(" ");
+    console.log('end  S8');
+
     // 9. Execute the chain with input documents and question
+    console.log('start  S9');
     const result = await chain.call({
       input_documents: [new Document({ pageContent: concatenatedPageContent })],
       question: question,
     });
+    console.log('end  S9');
+    
     // 10. Log the answer
     console.log(`Answer: ${result.text}`);
     return result.text
@@ -50,6 +70,8 @@ export const queryPineconeVectorStoreAndQueryLLM = async (
     console.log('Since there are no matches, GPT-3 will not be queried.');
   }
 };
+
+
 export const createPineconeIndex = async (
   client,
   indexName,
@@ -105,7 +127,13 @@ export const updatePinecone = async (client, indexName, docs) => {
       `Calling OpenAI's Embedding endpoint documents with ${chunks.length} text chunks ...`
     );
     // 6. Create OpenAI embeddings for documents
-    const embeddingsArrays = await new OpenAIEmbeddings().embedDocuments(
+
+    // TODO: setup a for loop for all the chuncks then add one for one while rate limiting
+
+    const embeddingsArrays = await new OpenAIEmbeddings({
+      openAIApiKey: process.env.OPENAI_API_KEY || '',
+      modelName: 'text-embedding-3-small',
+    }).embedDocuments(
       chunks.map((chunk) => chunk.pageContent.replace(/\n/g, " "))
     );
     console.log('Finished embedding documents');
@@ -114,7 +142,7 @@ export const updatePinecone = async (client, indexName, docs) => {
     );
     // 7. Create and upsert vectors in batches of 100
     const batchSize = 100;
-    let batch:any = [];
+    let batch: any = [];
     for (let idx = 0; idx < chunks.length; idx++) {
       const chunk = chunks[idx];
       const vector = {

@@ -9,6 +9,7 @@ export default function Home() {
   const [query, setQuery] = useState('')
   const [result, setResult] = useState('')
   const [loading, setLoading] = useState(false)
+  
   async function createIndexAndEmbeddings() {
     try {
       const result = await fetch('/api/setup', {
@@ -20,6 +21,7 @@ export default function Home() {
       console.log('err:', err)
     }
   }
+  
   async function sendQuery() {
     if (!query) return
     setResult('')
@@ -37,6 +39,7 @@ export default function Home() {
       setLoading(false)
     }
   }
+  
   return (
     <main className="flex flex-1 flex-col justify-center items-center p-24">
       <p

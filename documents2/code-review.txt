@@ -1,0 +1,785 @@
+
+cs.sun.ac.za
+🔒 #1 Code Review - Computer Science Security
+David Baker Effendi
+18–23 minutes
+
+This assignment takes the defense perspective and requires you to review code and suggest necessary fixes if any. Total mark allocation for a section is indicated in brackets (e.g. [2]) on the left of the section header, with specific allocations on subsequent subheadings.
+
+One day, as a senior dev, there will be new languages and frameworks entering your workspace and you won't be an expert on all of them. Along with these, you'll have some newbie developers adding vulnerabilities to your codebase unless you can stop them. Because of this we will look at a handful of languages so get ready to Google and look at some documentation in order to stop n00bs from costing you your job.
+
+Note: If you are really stuck, like truly stuck, you may email me to double check the question - there is a non-zero chance that I might have missed something and the intended vulnerability that is meant to be the answer might not be possible. - David
+
+Last Edit 25/02/2024 @ 19:45
+
+    JavaScript 1.1 code has been changed to correctly reflect santization, etc. as it was initially ambiguous.
+
+Full Marks: 49
+
+Submission Deadline: Thursday 7 March 23:59
+
+Write-Up Template: Download
+
+Plagiarism Declaration Form: Download
+PHP: Hypertext Preprocessor¶
+
+Section Total: 14
+
+In this section we'll look at some vulnerable PHP code.
+[6] Question 1¶
+
+Consider the code below. The form contains a hidden input on line 4 simply to indicate when the request has been submitted. When the form is submitted it directs the request to the value held in $_SERVER['PHP_SELF'] in line 3.
+
+After the submitting, the browser will then have submitted set in the request and the text Form submitted! will be displayed as shown by the logic in lines 6-8.
+
+ 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+
+	
+
+<html>
+ <body>
+  <form action="<?php echo $_SERVER['PHP_SELF']; ?>">
+   <input type="hidden" name="submitted" value="1" />
+   <input type="submit" value="Submit!" />
+  </form>
+  <?php
+  if (isset($_REQUEST['submitted']) && $_REQUEST['submitted'] == '1') {
+    echo "Form submitted!";
+  }
+  ?>
+ </body>
+</html>
+
+[2] Question 1.1¶
+
+Let's assume the website domain is http://foo.com/bar.php. What is $_SERVER['PHP_SELF'] and what would the URL be before and after submitting the form?
+[2] Question 1.2¶
+
+The attacker controls much of this code but what, in particular, can the attacker exploit in the code above? What kind of vulnerability can this be classified as?
+[2] Question 1.3¶
+
+Now that you've identified the vulnerability in the code, what can the developers do to fix this?
+[5] Question 2¶
+
+Below is an excerpt of code that a cloud file manager uses to display files and their contents. Each file and its contents are displayed in an HTML table.
+
+ 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+
+	
+
+<?php
+class UserFileController
+{
+   public $username;
+   private $file_dir;
+
+   function __construct()
+   {
+      $this->file_dir = "/files/" . $this->username;
+   }
+
+   function get_files(): array
+   {
+       return scandir($this->file_dir);
+   }
+
+   function read_file($filename): string
+   {
+       $contents = file_get_contents($file_dir . '/' . $filename);
+       if ($contents) return $contents;
+       else return "Unable to read file contents";
+   }
+
+   // __toString used to make serialization work
+   function __toString() {
+       return "UserFileController(" . filter_var($this->username, FILTER_SANITIZE_STRING) . ")";
+   }
+}
+
+// Some html code
+
+if (isset($_COOKIE['USER_DATA'])) {
+    $user_files = unserialize($_COOKIE['USER_DATA']);
+    echo '<table>
+            <tr>
+                <th>File</th>
+                <th>Contents</th> 
+            </tr>';
+    foreach ($user_files->get_files() as &$f) {
+        echo '<tr>';
+        echo '  <td>' . $f . '</td>';
+        echo '  <td>' . $user_files->read_file($f) . '</td>';
+        echo '</tr>
+        </table>';
+    }
+}
+?>
+
+Note: In this example assume that system call functions have been disabled and that RCE is not what we are looking for.
+[2] Question 2.1¶
+
+This code contains a vulnerability that can lead to a lot of data being leaked. Under what condition would the attacker be able to manipulate the flow of the code above and how can this be used to dump sensitive data?
+
+HINT: Can we simply modify cookies just like that?
+[3] Question 2.2¶
+
+Write an example of a payload that we can put in $_COOKIE['USER_DATA'] to exploit the aforementioned vulnerability.
+[3] Question 3¶
+
+Below is code referring to basic SQL login process using the mysqli driver. Once a user is logged in a session is created and managed via the database.
+
+ 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+
+	
+
+<?php
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $db = mysqli_connect(DB_SERVER, DB_USERNAME, DB_PASSWORD, DB_DATABASE);
+    $username = $_POST['username'];
+    $password = $_POST['password'];
+
+    $stmt = $db->prepare("SELECT id FROM users WHERE username = ? AND password = ?";
+    $stmt->bind_param("si", $username, $password);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = mysqli_fetch_array($result, MYSQLI_ASSOC);
+    $count = mysqli_num_rows($result);
+    $stmt->close();
+
+    if ($count === 1) {
+        $user_id = $row["id"];
+        session_register($user_id, $db);
+        header("Location: home.php");
+    } else {
+        $error = "The username/password combination is invalid.";
+    }
+}
+
+function session_register($user_id, $db) {
+    $session_id = generate_random_string();
+    $stmt = $db->prepare("INSERT INTO sessions (id, user_id) VALUES (?, ?)");
+    $stmt->bind_param("si", $user_id, $session_id);
+    $stmt->execute();
+    $stmt->close();
+    session_set_cookie_params("SESSION_ID", $session_id, time() + (86400 * 30), "/", null, null, false);
+}
+
+function generate_random_string() {
+    // Creates a random string of length 13
+}
+?>
+
+Assuming that an attacker is able to access browser storage on a victim's browser what could they do given the code above?
+JavaScript¶
+
+Section Total: 9
+
+In this section we'll look at some vulnerable JavaScript code. Specifically when JavaScript is being used as a backend server.
+[5] Question 1¶
+
+The code below shows an endpoint for an Express based Node server. The endpoint is used to search for items on the database.
+
+ 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+
+	
+
+app.get('/search', (req, res) => {
+    const searchTerm = req.query.term;
+    if (searchTerm !== null) {
+        // db.find looks for items matching searchTerm
+        var query = sanitize(searchTerm);
+        var results = db.find(query);
+        if (results.isEmpty()) {
+            res.status(400).json({ 
+                error: 'Unable to find results for "' + searchTerm + '".' 
+            });
+        } else {
+            res.status(200).json({ 
+                data: results
+            });
+        }
+    } else {
+        res.status(400).json({ 
+            error: 'Empty search query encountered.' 
+        });
+    }
+})
+
+// Start server
+app.listen(80, '0.0.0.0');
+
+Below is a snippet of EJS that handles the response.
+
+<% if (result.status == 400 ) { %>
+  <h1> <% result.error %> </h1>
+<% } else { %>
+  <table>
+    <% for(var i=0; i < result.data.length; i++) { %>
+    <tr>
+        <td><%= result.data[i].id %></td>
+        <td><%= result.data[i].name %></td>
+    </tr>
+    <% } %>
+    </table>
+ <% } %>
+
+[2] Question 1.1¶
+
+What vulnerability can you extrapolate from the code above and how can this be remediated?
+[3] Question 1.2¶
+
+If this is the microservice that a user navigates to after the login process from the last section's (PHP: Hypertext Preprocessor) Question 3, write a search term to exploit this vulnerability that will then steal sensitive data by exploiting the last vulnerability.
+[4] Question 2¶
+
+The following snippet of code is different to the prior vulnerabilities but is just as dangerous for the server. The following runs an Express.js endpoint called /create-random-graph.
+
+ 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+
+	
+
+app.get('/create-random-graph', async (req, res) => {
+    const numNodes = req.query.nodes;
+    const numEdges = req.query.edges;
+    if (typeof(numNodes) !== "number" && numNodes < 0) {
+        res.status(400).json({ 
+            error: 'Number of nodes must be an integer larger than 0.' 
+        });
+    } else if (numNodes > 5000) {
+        res.status(400).json({ 
+            error: 'Number of nodes must be an integer smaller than 5000.' 
+        });
+    }
+    if (typeof(numEdges) !== "number" && numEdges < 0) {
+        res.status(400).json({ 
+            error: 'Number of edges must be an integer larger than 0.' 
+        });
+    } else if (numEdges > 10_000) {
+        res.status(400).json({ 
+            error: 'Number of edges must be an integer smaller than 10 000.' 
+        });
+    }
+    var generator = getGraphGenerator(numNodes, numEdges)
+    res.status(200).json({ 
+        data: generator()
+    });
+})
+
+function getGraphGenerator(numNodes, numEdges) {
+    let nodes = generateNodes(numNodes); // Generates random IDs for nodes
+    function getRandomElementFromArr(arr) {
+        return arr[Math.floor(Math.random() * arr.length)];
+    }
+    function randomlyLinkComponents() {
+        let edges = []
+        // Initialize edge list
+        for (let i = 0; i < numNodes; i++) {
+            edges[i] = []
+        }
+        // Populate edge mapping with src -> [dst_nodes]
+        for (let i = 0; i < numEdges; i++) { 
+            let src = getRandomElementFromArr(nodes); // src is an int
+            let dst = getRandomElementFromArr(nodes); // dst is an int
+            edges[src].push(dst);
+        } 
+    }
+    return randomlyLinkComponents;
+}
+
+// Start server
+app.listen(80, '0.0.0.0');
+
+[2] Question 2.1¶
+
+The nested functions in JavaScript are called closures. When does a closure get marked for removal by the JavaScript garbage collector when it is referenced in a parent scope?
+[2] Question 2.2¶
+
+Noting that the /create-random-graph route uses the async keyword, how can an attacker cause a denial of service to this server?
+Java¶
+
+Section Total: 17
+
+The following shows some interesting vulnerabilities in Java. It would help to understand how inheritance and interfaces work in the following section.
+[12] Question 1¶
+
+In the third year networking course, RW354, the first project was a chat client and one could have chosen to send message objects using the Object Output/Input Stream classes. Clients would communicate via a server which would deserialize the object to obtain intent and forward the message to other clients via a separately wrapped object from the server.
+
+Below is an example of a client object:
+	
+
+class ClientObject extends Serializable {
+    int flag;
+    String text;
+    String recipient;
+    String sender;
+}
+
+The idea is that we could send these objects over the socket with ObjectOutputStream.writeObject and simply read this again with (ClientObject) ObjectInputStream.readObject.
+[1] Question 1.1¶
+
+What does writeObject and readObject do?
+[1] Question 1.2¶
+
+Which modifier can be added to a field to specify that it should not be serialized?
+
+Hint: The answer is not static.
+[5] Question 1.3¶
+
+Let's assume the ClientObject had an overriden readObject method handling the validation the input such as:
+
+class ClientObject extends Serializable {
+    int flag;
+    String text;
+    String recipient;
+    String sender;
+
+    @Override
+    void readObject(ObjectInputStream ois) {
+        ois.defaultReadObject();
+        if (this.flag > 5 || this.flag < 0) 
+            throw new RuntimeException("Invalid flag");
+    }
+}
+
+Let's assume an attacker wrote the following ClientObject in a binary format and sent it to the server.
+
+{
+    "@class": "ClientObject",
+    "flag": 6,
+    "text": {
+        "@class": "java.util.HashMap",
+        "@entries": [
+            { 
+                "key": {
+                    "@class": "java.lang.String",
+                    "value": "foo"
+                },
+                "value": {
+                    "@class": "java.lang.String",
+                    "value": "bar"
+                }
+            }
+        ]
+    },
+    "recipient": {
+        "@class": "java.lang.String",
+        "value": "Alice"
+    },
+    "sender": {
+        "@class": "java.lang.String",
+        "value": "Bob"
+    }
+}
+
+Note that:
+
+    The text field is a java.util.HashMap instead of a String
+    The flag is outside of a valid range
+
+[3] Question 1.3.1¶
+
+Assumming the connection does not crash, and the stream is open for deserialization, which two exceptions could we observe to be thrown when calling readObject on an ObjectInputStream about to read this data. Only one will be thrown, and which will happen first, and why?
+[2] Question 1.3.2¶
+
+Following the last question, would the attacker have successfully caused the execution of java.lang.String.hashCode before the exceptions were thrown? Justify this with code.
+[3] Question 1.4¶
+
+If the server had Closure v1.8.0 on the class path how can we exploit this chain of deserialization to obtain remote code execution? Cite your sources appropriately.
+[2] Question 1.5¶
+
+Propose a safer protocol for sending and receiving binary data, and describe how this mitigates the risks of the current implementation?
+[5] Question 2¶
+
+Spring Boot is a Java framework for creating web applications. If the server throws an exception while processing a request it is not uncommon to find what is called a "Whitelabel Error Page" that looks like the following:
+
+Whitelabel Error
+
+This can be customized but, by default, it looks something like what is shown above. The default template is usually an HTML/XML file parsed by Spring Expression Language (SpEL) and thus can include variables passed down to it via string interpolation.
+
+A typical templating tag could look like:
+
+<spring:message code="${param.msg}" />
+
+Where param directly resolves a URL get parameter and msg is the parameter key. Given an endpoint such as:
+	
+
+@RequestMapping(value="/users")
+String users(String username) {
+    try {
+        var result = userService.find(username);
+        return buildUserResultTemplate(result); // Builds an intended result
+    } catch (CustomException e) {
+        return "redirect:/error?msg=" + e.getMessage();
+    }
+}
+
+Assuming there is a web application with the endpoint /users?name=BigDataDave that returns a user page based on the given username. If an unknown username is given, such as Test, it shows a whitelabel error page with the message:
+
+<h1>Whitelabel Error Page</h1>
+<p>This application has no explicit mapping for /error, so you are seeing this as a fallback.</p>
+<br/>
+<p>Fri Aug 27 14:42:13 IST 2021</p>
+<p>There was an unexpected error (type=Internal Server Error, status=500).</p>
+<p>For id parameter value: Test</p>
+
+If we can't inject a payload that uses quotes because they'll be encoded by some mild defense on the endpoint (e.g. " will be encoded to %22), using static method calls from the java.lang.Character class, create a payload for the name parameter to leak the server's user running the web application. Note that this is not a user on the web application but the server operating system user running the web application.
+
+Hint: Use this SpEL Guide
+C¶
+
+Section Total: 9
+
+Some C based bugs lie ahead...
+[5] Question 1¶
+
+#ifdef directives in C-based languages give opportunities for various configurations for various builds of a program. This can be useful for debugging and testing builds but each additional #ifdef-directive adds an additional factor of permutations that a codebase could be built in.
+
+An example of a catastrophic instance of an incorrect combination of flags being deployed in a production build was Apple's Mac OS X version 10.7.3 where a debug flag was left on.
+
+The code below simplifies what such a bug could look like:
+
+ 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+
+	
+
+void main() {
+    int x = secret();
+    int y = 0;
+#ifdef F
+    x = 0;
+#endif
+#ifdef G
+    y = foo(x);
+#endif
+    print(y);
+}
+
+int foo(int p) {
+#ifdef H
+    p = 0;
+#endif
+    return p;
+}
+
+[1] Question 1.1¶
+
+By flipping the variables F, G, and H, how many potential builds of this program are there?
+[1] Question 1.2¶
+
+Which permutation of the three variables leaks the secret on line 2 assigned initially to variable x at the print statement at the end of main?
+[3] Question 1.3¶
+
+Question 1.2 shows us an example of taint-analysis - tracking tainted data from sensitive sources of data (e.g. secret()) and querying if they leak at sensitive sinks (e.g. print(y);).
+
+Give an example of an attacker-controlled source and a respective sensitive sink that could result in a buffer-overflow vulnerability if the data-flow path remained uninterrupted.
+
+Justify this combination with a code example and description.
+[4] Question 2¶
+
+Below is a function that unarchives a compressed TAR file:
+
+ 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+
+	
+
+#include <archive.h>
+#include <archive_entry.h>
+#include <stdio.h>
+// ...
+
+int f(const char *filename, int flags) {
+  const long long int max_file_size = 1000000L; // 1MB
+  struct archive_entry *entry;
+  struct archive *a = archive_read_new();
+  struct archive *ext = archive_write_disk_new();
+  archive_write_disk_set_options(ext, flags);
+  archive_read_support_format_tar(a);
+
+  // Only unarchive files smaller than max file size
+  int file_size = check_file_size(filename);
+  if (file_size == -1L || file_size > max_file_size) {
+    return 1;
+  }
+
+  // Initialize archive entry at the file and set block size
+  int r = archive_read_open_filename(a, filename, 10240);
+  // Make sure first header is okay
+  if (r != ARCHIVE_OK)
+    return 1;
+
+  // If first header ok, unarchive until termination
+  for (;;) {
+    r = archive_read_next_header(a, &entry);
+    if (r == ARCHIVE_EOF) {
+      break;
+    }
+    if (r != ARCHIVE_OK) {
+      return 1;
+    }
+  }
+  archive_read_close(a);
+  archive_read_free(a);
+
+  archive_write_close(ext);
+  archive_write_free(ext);
+  return 0;
+}
+
+long long int check_file_size(const char *filename) {
+  FILE *fp;
+  fp = fopen(filename, "r");
+  long long int sz = -1L;
+  if (fp != NULL) {
+    fseek(fp, 0L, SEEK_END);
+    sz = ftell(fp);
+    fclose(fp);
+  }
+  return sz;
+}
+
+[2] Question 2.1¶
+
+What kind of attack on the following function would cause denial of service? Describe a kind of input that could cause this server to stop functioning normally.
+[2] Question 2.2¶
+
+Suggest a two checks that should be performed during the unarchiving process to prevent a denial of service attack from being exploited at this function.
+Write Up¶
+
+You will be required to write a report detailing all of the information you have gathered throughout the assignment. This will take the form of a PDF written in LaTeX using the given template.
+
+Headers are given on this template and the report should be fairly self explanatory by simply answering the questions from this page.
+
