@@ -127,9 +127,8 @@ export const updatePinecone = async (client, indexName, docs) => {
       `Calling OpenAI's Embedding endpoint documents with ${chunks.length} text chunks ...`
     );
     // 6. Create OpenAI embeddings for documents
-
+    
     // TODO: setup a for loop for all the chuncks then add one for one while rate limiting
-
     const embeddingsArrays = await new OpenAIEmbeddings({
       openAIApiKey: process.env.OPENAI_API_KEY || '',
       modelName: 'text-embedding-3-small',
